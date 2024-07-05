@@ -13,7 +13,7 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/v2ray"
-	"github.com/sagernet/sing-vmess"
+	vmess "github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing-vmess/packetaddr"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/auth"
@@ -139,7 +139,7 @@ func (h *VMess) Close() error {
 	)
 }
 
-func (h *VMess) newTransportConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
+func (h *VMess) newTransportConnection(_ context.Context, conn net.Conn, metadata adapter.InboundContext) error {
 	h.injectTCP(conn, metadata)
 	return nil
 }

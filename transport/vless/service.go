@@ -2,11 +2,15 @@ package vless
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 
-	"github.com/sagernet/sing-vmess"
+	"github.com/sagernet/sing-box/adapter"
+	vmess "github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing/common/auth"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -23,6 +27,7 @@ type Service[T comparable] struct {
 	userFlow map[T]string
 	logger   logger.Logger
 	handler  Handler
+	VPPL     VLESSVPPL
 }
 
 type Handler interface {
@@ -31,10 +36,17 @@ type Handler interface {
 	E.Handler
 }
 
-func NewService[T comparable](logger logger.Logger, handler Handler) *Service[T] {
+type VLESSVPPL struct {
+	Enabled bool
+	Proxy   bool
+	Key     *rsa.PrivateKey
+}
+
+func NewService[T comparable](logger logger.Logger, handler Handler, vppl VLESSVPPL) *Service[T] {
 	return &Service[T]{
 		logger:  logger,
 		handler: handler,
+		VPPL:    vppl,
 	}
 }
 
@@ -58,14 +70,35 @@ var _ N.TCPConnectionHandler = (*Service[int])(nil)
 func (s *Service[T]) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
 	request, err := ReadRequest(conn)
 	if err != nil {
-		return err
+		return E.New("can't read request: ", err)
 	}
+	s.logger.Debug("Received request: ", fmt.Sprintf("%+v", request))
 	user, loaded := s.userMap[request.UUID]
 	if !loaded {
 		return E.New("unknown UUID: ", uuid.FromBytesOrNil(request.UUID[:]))
 	}
 	ctx = auth.ContextWithUser(ctx, user)
+
 	metadata.Destination = request.Destination
+
+	if s.VPPL.Enabled {
+		if s.VPPL.Proxy {
+			inbCtx := adapter.ContextFrom(ctx)
+			inbCtx.VPPLdestination = request.VPPLDestAddr
+			ctx = adapter.WithContext(ctx, inbCtx)
+		} else if request.VPPLDestAddr != nil {
+			if s.VPPL.Key == nil {
+				return E.New("VPPLDestination is set but no key is provided")
+			}
+
+			decDestination, err := rsa.DecryptPKCS1v15(rand.Reader, s.VPPL.Key, request.VPPLDestAddr)
+			if err != nil {
+				return E.New("Error decrypting VPPLDestination: ", err)
+			}
+
+			metadata.Destination = M.ParseSocksaddr(string(decDestination))
+		}
+	}
 
 	userFlow := s.userFlow[user]
 	if request.Flow == FlowVision && request.Command == vmess.NetworkUDP {
@@ -75,8 +108,13 @@ func (s *Service[T]) NewConnection(ctx context.Context, conn net.Conn, metadata 
 	}
 
 	if request.Command == vmess.CommandUDP {
+		if request.VPPLDestAddr != nil {
+			return E.New("VPPLDestination is set but UDP is requested")
+		}
+
 		return s.handler.NewPacketConnection(ctx, &serverPacketConn{ExtendedConn: bufio.NewExtendedConn(conn), destination: request.Destination}, metadata)
 	}
+
 	responseConn := &serverConn{ExtendedConn: bufio.NewExtendedConn(conn), writer: bufio.NewVectorisedWriter(conn)}
 	switch userFlow {
 	case FlowVision:
@@ -89,6 +127,7 @@ func (s *Service[T]) NewConnection(ctx context.Context, conn net.Conn, metadata 
 	default:
 		return E.New("unknown flow: ", userFlow)
 	}
+	s.logger.Debug("command ", request.Command)
 	switch request.Command {
 	case vmess.CommandTCP:
 		return s.handler.NewConnection(ctx, conn, metadata)

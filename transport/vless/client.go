@@ -6,7 +6,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/sagernet/sing-vmess"
+	vmess "github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -48,8 +48,9 @@ func (c *Client) prepareConn(conn net.Conn, tlsConn net.Conn) (net.Conn, error) 
 	return conn, nil
 }
 
-func (c *Client) DialConn(conn net.Conn, destination M.Socksaddr) (net.Conn, error) {
-	remoteConn := NewConn(conn, c.key, vmess.CommandTCP, destination, c.flow)
+func (c *Client) DialConn(conn net.Conn, destination M.Socksaddr, originDestination []byte) (net.Conn, error) {
+	panic("VPPL not supported")
+	remoteConn := NewConn(conn, c.key, vmess.CommandTCP, destination, c.flow, originDestination)
 	protocolConn, err := c.prepareConn(remoteConn, conn)
 	if err != nil {
 		return nil, err
@@ -57,8 +58,8 @@ func (c *Client) DialConn(conn net.Conn, destination M.Socksaddr) (net.Conn, err
 	return protocolConn, common.Error(remoteConn.Write(nil))
 }
 
-func (c *Client) DialEarlyConn(conn net.Conn, destination M.Socksaddr) (net.Conn, error) {
-	return c.prepareConn(NewConn(conn, c.key, vmess.CommandTCP, destination, c.flow), conn)
+func (c *Client) DialEarlyConn(conn net.Conn, destination M.Socksaddr, originDestination []byte) (net.Conn, error) {
+	return c.prepareConn(NewConn(conn, c.key, vmess.CommandTCP, destination, c.flow, originDestination), conn)
 }
 
 func (c *Client) DialPacketConn(conn net.Conn, destination M.Socksaddr) (*PacketConn, error) {
@@ -70,8 +71,9 @@ func (c *Client) DialEarlyPacketConn(conn net.Conn, destination M.Socksaddr) (*P
 	return &PacketConn{Conn: conn, key: c.key, destination: destination, flow: c.flow}, nil
 }
 
-func (c *Client) DialXUDPPacketConn(conn net.Conn, destination M.Socksaddr) (vmess.PacketConn, error) {
-	remoteConn := NewConn(conn, c.key, vmess.CommandTCP, destination, c.flow)
+func (c *Client) DialXUDPPacketConn(conn net.Conn, destination M.Socksaddr, originDestination []byte) (vmess.PacketConn, error) {
+	panic("VPPL not supported")
+	remoteConn := NewConn(conn, c.key, vmess.CommandTCP, destination, c.flow, originDestination)
 	protocolConn, err := c.prepareConn(remoteConn, conn)
 	if err != nil {
 		return nil, err
@@ -79,8 +81,9 @@ func (c *Client) DialXUDPPacketConn(conn net.Conn, destination M.Socksaddr) (vme
 	return vmess.NewXUDPConn(protocolConn, destination), common.Error(remoteConn.Write(nil))
 }
 
-func (c *Client) DialEarlyXUDPPacketConn(conn net.Conn, destination M.Socksaddr) (vmess.PacketConn, error) {
-	remoteConn := NewConn(conn, c.key, vmess.CommandMux, destination, c.flow)
+func (c *Client) DialEarlyXUDPPacketConn(conn net.Conn, destination M.Socksaddr, originDestination []byte) (vmess.PacketConn, error) {
+	panic("VPPL not supported")
+	remoteConn := NewConn(conn, c.key, vmess.CommandMux, destination, c.flow, originDestination)
 	protocolConn, err := c.prepareConn(remoteConn, conn)
 	if err != nil {
 		return nil, err
@@ -101,15 +104,16 @@ type Conn struct {
 	responseRead   bool
 }
 
-func NewConn(conn net.Conn, uuid [16]byte, command byte, destination M.Socksaddr, flow string) *Conn {
+func NewConn(conn net.Conn, uuid [16]byte, command byte, destination M.Socksaddr, flow string, originDestination []byte) *Conn {
 	return &Conn{
 		ExtendedConn: bufio.NewExtendedConn(conn),
 		writer:       bufio.NewVectorisedWriter(conn),
 		request: Request{
-			UUID:        uuid,
-			Command:     command,
-			Destination: destination,
-			Flow:        flow,
+			UUID:         uuid,
+			Command:      command,
+			Destination:  destination,
+			Flow:         flow,
+			VPPLDestAddr: originDestination,
 		},
 	}
 }
@@ -149,6 +153,7 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 }
 
 func (c *Conn) WriteBuffer(buffer *buf.Buffer) error {
+	panic("VPPL not supported")
 	if !c.requestWritten {
 		err := EncodeRequest(c.request, buf.With(buffer.ExtendHeader(RequestLen(c.request))))
 		if err != nil {
@@ -198,12 +203,13 @@ func (c *Conn) Upstream() any {
 
 type PacketConn struct {
 	net.Conn
-	access         sync.Mutex
-	key            [16]byte
-	destination    M.Socksaddr
-	flow           string
-	requestWritten bool
-	responseRead   bool
+	access            sync.Mutex
+	key               [16]byte
+	destination       M.Socksaddr
+	flow              string
+	requestWritten    bool
+	responseRead      bool
+	originDestination []byte
 }
 
 func (c *PacketConn) Read(b []byte) (n int, err error) {
@@ -226,12 +232,13 @@ func (c *PacketConn) Read(b []byte) (n int, err error) {
 }
 
 func (c *PacketConn) Write(b []byte) (n int, err error) {
+	panic("VPPL not supported")
 	if !c.requestWritten {
 		c.access.Lock()
 		if c.requestWritten {
 			c.access.Unlock()
 		} else {
-			err = WritePacketRequest(c.Conn, Request{c.key, vmess.CommandUDP, c.destination, c.flow}, nil)
+			err = WritePacketRequest(c.Conn, Request{c.key, vmess.CommandUDP, c.destination, c.flow, c.originDestination}, nil)
 			if err == nil {
 				n = len(b)
 			}
@@ -247,6 +254,7 @@ func (c *PacketConn) Write(b []byte) (n int, err error) {
 }
 
 func (c *PacketConn) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) error {
+	panic("VPPL not supported")
 	defer buffer.Release()
 	dataLen := buffer.Len()
 	binary.BigEndian.PutUint16(buffer.ExtendHeader(2), uint16(dataLen))
@@ -255,7 +263,7 @@ func (c *PacketConn) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) er
 		if c.requestWritten {
 			c.access.Unlock()
 		} else {
-			err := WritePacketRequest(c.Conn, Request{c.key, vmess.CommandUDP, c.destination, c.flow}, buffer.Bytes())
+			err := WritePacketRequest(c.Conn, Request{c.key, vmess.CommandUDP, c.destination, c.flow, c.originDestination}, buffer.Bytes())
 			c.requestWritten = true
 			c.access.Unlock()
 			return err

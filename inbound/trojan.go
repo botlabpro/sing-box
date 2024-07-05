@@ -149,7 +149,7 @@ func (h *Trojan) Close() error {
 	)
 }
 
-func (h *Trojan) newTransportConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
+func (h *Trojan) newTransportConnection(_ context.Context, conn net.Conn, metadata adapter.InboundContext) error {
 	h.injectTCP(conn, metadata)
 	return nil
 }

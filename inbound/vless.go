@@ -2,6 +2,9 @@ package inbound
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"net"
 	"os"
 
@@ -14,7 +17,7 @@ import (
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/v2ray"
 	"github.com/sagernet/sing-box/transport/vless"
-	"github.com/sagernet/sing-vmess"
+	vmess "github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing-vmess/packetaddr"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/auth"
@@ -29,6 +32,12 @@ var (
 	_ adapter.InjectableInbound = (*VLESS)(nil)
 )
 
+type VLESSVPPL struct {
+	Enabled bool
+	Proxy   bool
+	Key     *rsa.PrivateKey
+}
+
 type VLESS struct {
 	myInboundAdapter
 	ctx       context.Context
@@ -36,6 +45,7 @@ type VLESS struct {
 	service   *vless.Service[int]
 	tlsConfig tls.ServerConfig
 	transport adapter.V2RayServerTransport
+	VPPL      VLESSVPPL
 }
 
 func NewVLESS(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.VLESSInboundOptions) (*VLESS, error) {
@@ -52,12 +62,35 @@ func NewVLESS(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		ctx:   ctx,
 		users: options.Users,
 	}
+
+	if options.VPPL.Enabled {
+		inbound.VPPL = VLESSVPPL{
+			Enabled: true,
+			Proxy:   options.VPPL.Proxy,
+		}
+
+		if !options.VPPL.Proxy {
+			privateKeyPEM, err := os.ReadFile(options.VPPL.Key)
+			if err != nil {
+				return nil, err
+			}
+
+			privateKeyBlock, _ := pem.Decode(privateKeyPEM)
+
+			inbound.VPPL.Key, err = x509.ParsePKCS1PrivateKey(privateKeyBlock.Bytes)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	var err error
+
 	inbound.router, err = mux.NewRouterWithOptions(inbound.router, logger, common.PtrValueOrDefault(options.Multiplex))
 	if err != nil {
 		return nil, err
 	}
-	service := vless.NewService[int](logger, adapter.NewUpstreamContextHandler(inbound.newConnection, inbound.newPacketConnection, inbound))
+	service := vless.NewService[int](logger, adapter.NewUpstreamContextHandler(inbound.newConnection, inbound.newPacketConnection, inbound), vless.VLESSVPPL{Proxy: inbound.VPPL.Proxy, Key: inbound.VPPL.Key, Enabled: inbound.VPPL.Enabled})
 	service.UpdateUsers(common.MapIndexed(inbound.users, func(index int, _ option.VLESSUser) int {
 		return index
 	}), common.Map(inbound.users, func(it option.VLESSUser) string {
@@ -129,7 +162,7 @@ func (h *VLESS) Close() error {
 	)
 }
 
-func (h *VLESS) newTransportConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
+func (h *VLESS) newTransportConnection(_ context.Context, conn net.Conn, metadata adapter.InboundContext) error {
 	h.injectTCP(conn, metadata)
 	return nil
 }
