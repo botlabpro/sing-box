@@ -11,7 +11,6 @@ import (
 
 	"github.com/sagernet/sing-box/adapter"
 	vmess "github.com/sagernet/sing-vmess"
-	"github.com/sagernet/sing/common/auth"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
@@ -67,6 +66,17 @@ func (s *Service[T]) UpdateUsers(userList []T, userUUIDList []string, userFlowLi
 
 var _ N.TCPConnectionHandler = (*Service[int])(nil)
 
+type userKey struct{}
+
+func ContextWithUser(ctx context.Context, user string) context.Context {
+	return context.WithValue(ctx, (*userKey)(nil), user)
+}
+
+func UserFromContext(ctx context.Context) (string, bool) {
+	user, loaded := ctx.Value((*userKey)(nil)).(string)
+	return user, loaded
+}
+
 func (s *Service[T]) NewConnection(ctx context.Context, conn net.Conn, metadata M.Metadata) error {
 	request, err := ReadRequest(conn)
 	if err != nil {
@@ -74,7 +84,7 @@ func (s *Service[T]) NewConnection(ctx context.Context, conn net.Conn, metadata 
 	}
 	s.logger.Debug("Received request: ", fmt.Sprintf("%+v", request))
 
-	ctx = auth.ContextWithUser(ctx, uuid.FromBytesOrNil(request.UUID[:]))
+	ctx = ContextWithUser(ctx, uuid.FromBytesOrNil(request.UUID[:]).String())
 
 	metadata.Destination = request.Destination
 

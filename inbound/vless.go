@@ -21,7 +21,6 @@ import (
 	vmess "github.com/sagernet/sing-vmess"
 	"github.com/sagernet/sing-vmess/packetaddr"
 	"github.com/sagernet/sing/common"
-	"github.com/sagernet/sing/common/auth"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
@@ -189,7 +188,7 @@ func (h *VLESS) NewPacketConnection(ctx context.Context, conn N.PacketConn, meta
 }
 
 func (h *VLESS) newConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
-	user, loaded := auth.UserFromContext[string](ctx)
+	user, loaded := vless.UserFromContext(ctx)
 	if !loaded {
 		return os.ErrInvalid
 	}
@@ -199,7 +198,7 @@ func (h *VLESS) newConnection(ctx context.Context, conn net.Conn, metadata adapt
 }
 
 func (h *VLESS) newPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
-	user, loaded := auth.UserFromContext[string](ctx)
+	user, loaded := vless.UserFromContext(ctx)
 	if !loaded {
 		return os.ErrInvalid
 	}
