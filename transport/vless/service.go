@@ -73,11 +73,8 @@ func (s *Service[T]) NewConnection(ctx context.Context, conn net.Conn, metadata 
 		return E.New("can't read request: ", err)
 	}
 	s.logger.Debug("Received request: ", fmt.Sprintf("%+v", request))
-	user, loaded := s.userMap[request.UUID]
-	if !loaded {
-		return E.New("unknown UUID: ", uuid.FromBytesOrNil(request.UUID[:]))
-	}
-	ctx = auth.ContextWithUser(ctx, user)
+
+	ctx = auth.ContextWithUser(ctx, uuid.FromBytesOrNil(request.UUID[:]))
 
 	metadata.Destination = request.Destination
 
@@ -100,7 +97,7 @@ func (s *Service[T]) NewConnection(ctx context.Context, conn net.Conn, metadata 
 		}
 	}
 
-	userFlow := s.userFlow[user]
+	userFlow := FlowVision
 	if request.Flow == FlowVision && request.Command == vmess.NetworkUDP {
 		return E.New(FlowVision, " flow does not support UDP")
 	} else if request.Flow != userFlow {

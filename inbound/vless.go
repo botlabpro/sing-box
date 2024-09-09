@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"net"
 	"os"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/auth"
 	E "github.com/sagernet/sing/common/exceptions"
-	F "github.com/sagernet/sing/common/format"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
 )
@@ -77,9 +77,15 @@ func NewVLESS(ctx context.Context, router adapter.Router, logger log.ContextLogg
 
 			privateKeyBlock, _ := pem.Decode(privateKeyPEM)
 
-			inbound.VPPL.Key, err = x509.ParsePKCS1PrivateKey(privateKeyBlock.Bytes)
+			inboundKey, err := x509.ParsePKCS8PrivateKey(privateKeyBlock.Bytes)
 			if err != nil {
 				return nil, err
+			}
+			privateKey, ok := inboundKey.(*rsa.PrivateKey)
+			if ok {
+				inbound.VPPL.Key = privateKey
+			} else {
+				return nil, errors.New("vppl key not rsa private key")
 			}
 		}
 	}
@@ -183,31 +189,21 @@ func (h *VLESS) NewPacketConnection(ctx context.Context, conn N.PacketConn, meta
 }
 
 func (h *VLESS) newConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
-	userIndex, loaded := auth.UserFromContext[int](ctx)
+	user, loaded := auth.UserFromContext[string](ctx)
 	if !loaded {
 		return os.ErrInvalid
 	}
-	user := h.users[userIndex].Name
-	if user == "" {
-		user = F.ToString(userIndex)
-	} else {
-		metadata.User = user
-	}
+	metadata.User = user
 	h.logger.InfoContext(ctx, "[", user, "] inbound connection to ", metadata.Destination)
 	return h.router.RouteConnection(ctx, conn, metadata)
 }
 
 func (h *VLESS) newPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
-	userIndex, loaded := auth.UserFromContext[int](ctx)
+	user, loaded := auth.UserFromContext[string](ctx)
 	if !loaded {
 		return os.ErrInvalid
 	}
-	user := h.users[userIndex].Name
-	if user == "" {
-		user = F.ToString(userIndex)
-	} else {
-		metadata.User = user
-	}
+	metadata.User = user
 	if metadata.Destination.Fqdn == packetaddr.SeqPacketMagicAddress {
 		metadata.Destination = M.Socksaddr{}
 		conn = packetaddr.NewConn(conn.(vmess.PacketConn), metadata.Destination)
