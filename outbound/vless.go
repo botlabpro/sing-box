@@ -6,9 +6,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"net"
-	"os"
-
+	"errors"
+	"fmt"
 	"github.com/sagernet/sing-box/adapter"
 	"github.com/sagernet/sing-box/common/dialer"
 	"github.com/sagernet/sing-box/common/mux"
@@ -24,6 +23,9 @@ import (
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
+	"io"
+	"net"
+	"strings"
 )
 
 var _ adapter.Outbound = (*VLESS)(nil)
@@ -74,12 +76,16 @@ func NewVLESS(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		}
 
 		if !options.VPPL.Proxy {
-			publicKeyPEM, err := os.ReadFile(options.VPPL.Key)
+			if len(options.VPPL.Key) == 0 {
+				return nil, errors.New("VPPL: no public key")
+			}
+			r := strings.NewReader(fmt.Sprintf("-----BEGIN PUBLIC KEY-----\n%s\n-----END PUBLIC KEY-----", options.VPPL.Key))
+			pemBytes, err := io.ReadAll(r)
 			if err != nil {
 				return nil, err
 			}
 
-			publicKeyBlock, _ := pem.Decode(publicKeyPEM)
+			publicKeyBlock, _ := pem.Decode(pemBytes)
 
 			publicKey, err := x509.ParsePKIXPublicKey(publicKeyBlock.Bytes)
 			if err != nil {

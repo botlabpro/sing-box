@@ -3,9 +3,10 @@ package option
 import M "github.com/sagernet/sing/common/metadata"
 
 type VPPLOptions struct {
-	Enabled bool   `json:"enabled"`
-	Key     string `json:"path_to_key,omitempty"`
-	Proxy   bool   `json:"proxy,omitempty"`
+	Enabled   bool   `json:"enabled"`
+	PathToKey string `json:"path_to_key,omitempty"`
+	Key       string `json:"key,omitempty"`
+	Proxy     bool   `json:"proxy,omitempty"`
 }
 
 type VPPLOutboundOptions struct {

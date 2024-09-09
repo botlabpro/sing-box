@@ -69,7 +69,7 @@ func NewVLESS(ctx context.Context, router adapter.Router, logger log.ContextLogg
 		}
 
 		if !options.VPPL.Proxy {
-			privateKeyPEM, err := os.ReadFile(options.VPPL.Key)
+			privateKeyPEM, err := os.ReadFile(options.VPPL.PathToKey)
 			if err != nil {
 				return nil, err
 			}
