@@ -49,7 +49,6 @@ func (c *Client) prepareConn(conn net.Conn, tlsConn net.Conn) (net.Conn, error) 
 }
 
 func (c *Client) DialConn(conn net.Conn, destination M.Socksaddr, originDestination []byte) (net.Conn, error) {
-	panic("VPPL not supported")
 	remoteConn := NewConn(conn, c.key, vmess.CommandTCP, destination, c.flow, originDestination)
 	protocolConn, err := c.prepareConn(remoteConn, conn)
 	if err != nil {
@@ -72,7 +71,6 @@ func (c *Client) DialEarlyPacketConn(conn net.Conn, destination M.Socksaddr) (*P
 }
 
 func (c *Client) DialXUDPPacketConn(conn net.Conn, destination M.Socksaddr, originDestination []byte) (vmess.PacketConn, error) {
-	panic("VPPL not supported")
 	remoteConn := NewConn(conn, c.key, vmess.CommandTCP, destination, c.flow, originDestination)
 	protocolConn, err := c.prepareConn(remoteConn, conn)
 	if err != nil {
@@ -82,7 +80,6 @@ func (c *Client) DialXUDPPacketConn(conn net.Conn, destination M.Socksaddr, orig
 }
 
 func (c *Client) DialEarlyXUDPPacketConn(conn net.Conn, destination M.Socksaddr, originDestination []byte) (vmess.PacketConn, error) {
-	panic("VPPL not supported")
 	remoteConn := NewConn(conn, c.key, vmess.CommandMux, destination, c.flow, originDestination)
 	protocolConn, err := c.prepareConn(remoteConn, conn)
 	if err != nil {
@@ -153,7 +150,6 @@ func (c *Conn) Write(b []byte) (n int, err error) {
 }
 
 func (c *Conn) WriteBuffer(buffer *buf.Buffer) error {
-	panic("VPPL not supported")
 	if !c.requestWritten {
 		err := EncodeRequest(c.request, buf.With(buffer.ExtendHeader(RequestLen(c.request))))
 		if err != nil {
@@ -232,7 +228,6 @@ func (c *PacketConn) Read(b []byte) (n int, err error) {
 }
 
 func (c *PacketConn) Write(b []byte) (n int, err error) {
-	panic("VPPL not supported")
 	if !c.requestWritten {
 		c.access.Lock()
 		if c.requestWritten {
@@ -254,7 +249,6 @@ func (c *PacketConn) Write(b []byte) (n int, err error) {
 }
 
 func (c *PacketConn) WritePacket(buffer *buf.Buffer, destination M.Socksaddr) error {
-	panic("VPPL not supported")
 	defer buffer.Release()
 	dataLen := buffer.Len()
 	binary.BigEndian.PutUint16(buffer.ExtendHeader(2), uint16(dataLen))
