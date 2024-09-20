@@ -133,7 +133,7 @@ func readAddons(reader io.Reader) (*Addons, error) {
 func WriteRequest(writer io.Writer, request Request, payload []byte) error {
 	buffer := buf.NewSize(RequestLen(request) + len(payload))
 	defer buffer.Release()
-	err := EncodeRequest(request, buffer)
+	err := EncodeRequest(request, buffer, request.Command)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func WriteRequest(writer io.Writer, request Request, payload []byte) error {
 	return common.Error(writer.Write(buffer.Bytes()))
 }
 
-func EncodeRequest(request Request, buffer *buf.Buffer) error {
+func EncodeRequest(request Request, buffer *buf.Buffer, command byte) error {
 	addonsLen := RequestAddonLen(request)
 	common.Must(
 		buffer.WriteByte(Version),
@@ -166,10 +166,8 @@ func EncodeRequest(request Request, buffer *buf.Buffer) error {
 			binary.PutUvarint(buffer.Extend(1), 0)
 		}
 	}
-	common.Must(
-		buffer.WriteByte(request.Command),
-	)
-	if request.Command != vmess.CommandMux {
+	common.Must(buffer.WriteByte(command))
+	if command != vmess.CommandMux {
 		err := vmess.AddressSerializer.WriteAddrPort(buffer, request.Destination)
 		if err != nil {
 			return err
@@ -217,40 +215,10 @@ func RequestLen(request Request) int {
 }
 
 func WritePacketRequest(writer io.Writer, request Request, payload []byte) error {
-	var requestLen int
-	requestLen += 1  // version
-	requestLen += 16 // uuid
-	requestLen += 1  // protobuf length
-	var addonsLen int
-	/*if request.Flow != "" {
-		addonsLen += 1 // protobuf header
-		addonsLen += rw.UVariantLen(uint64(len(request.Flow)))
-		addonsLen += len(request.Flow)
-		requestLen += addonsLen
-	}*/
-	requestLen += 1 // command
-	requestLen += vmess.AddressSerializer.AddrPortLen(request.Destination)
-	if len(payload) > 0 {
-		requestLen += 2
-		requestLen += len(payload)
-	}
-	buffer := buf.NewSize(requestLen)
+	buffer := buf.NewSize(RequestLen(request) + len(payload))
 	defer buffer.Release()
-	common.Must(
-		buffer.WriteByte(Version),
-		common.Error(buffer.Write(request.UUID[:])),
-		buffer.WriteByte(byte(addonsLen)),
-	)
 
-	if addonsLen > 0 {
-		common.Must(buffer.WriteByte(10))
-		binary.PutUvarint(buffer.Extend(rw.UVariantLen(uint64(len(request.Flow)))), uint64(len(request.Flow)))
-		common.Must(common.Error(buffer.WriteString(request.Flow)))
-	}
-
-	common.Must(buffer.WriteByte(vmess.CommandUDP))
-
-	err := vmess.AddressSerializer.WriteAddrPort(buffer, request.Destination)
+	err := EncodeRequest(request, buffer, vmess.CommandUDP)
 	if err != nil {
 		return err
 	}
