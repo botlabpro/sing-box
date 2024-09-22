@@ -18,7 +18,7 @@ import (
 )
 
 func init() {
-	StatsService_ServiceDesc.ServiceName = "v2ray.core.app.stats.command.StatsService"
+	//StatsService_ServiceDesc.ServiceName = "v2ray.core.app.stats.command.StatsService"
 }
 
 var (
